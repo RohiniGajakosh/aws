@@ -13,7 +13,7 @@ IGW_NAME="NewIGA"
 AMI_ID="ami-08982f1c5bf93d976"
 INSTANCE_TYPE="t3.micro"
 KEY_PAIR="newkey"
-SECURITY_GROUP="default"
+EC2_SECURITY_GROUP_NAME="default"
 SUBNET_ID="subnet-0a84f8e3f28830baf"
 EC2_NAME="neweraInstance"
 
@@ -25,10 +25,40 @@ DB_VERSION="8.0.42"
 DB_CLASS="db.t3.micro"
 DB_NAME="databse"
 DB_USERNAME="rohini"
-DB_PASSWORD="redhat"
-DB_SECURITY_GROUP="default"
+DB_PASSWORD="RedhatRohini"
+DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohupohu"
-aws rds create-db-subnet-group --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" --db-subnet-group-description "Rohisubs" --subnet-ids subnet-0fb2b2f40dc248824 subnet-0ad9dbc1339984ca4 --region "$REGION" >/dev/null
+SUBNET_IDS=(subnet-08a2dfbe354244295 subnet-0db0c08055de3e0b1)
+
+EC2_SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=$EC2_SECURITY_GROUP_NAME" \
+  --region "$REGION" \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+DB_SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=$DB_SECURITY_GROUP_NAME" \
+  --region "$REGION" \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+if [[ "$EC2_SECURITY_GROUP_ID" == "None" || -z "$EC2_SECURITY_GROUP_ID" ]]; then
+  echo "Failed to resolve EC2 security group '$EC2_SECURITY_GROUP_NAME' in VPC $VPC_ID" >&2
+  exit 1
+fi
+
+if [[ "$DB_SECURITY_GROUP_ID" == "None" || -z "$DB_SECURITY_GROUP_ID" ]]; then
+  echo "Failed to resolve DB security group '$DB_SECURITY_GROUP_NAME' in VPC $VPC_ID" >&2
+  exit 1
+fi
+
+if ! aws rds describe-db-subnet-groups --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" --region "$REGION" >/dev/null 2>&1; then
+  aws rds create-db-subnet-group \
+    --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
+    --db-subnet-group-description "Rohisubs" \
+    --subnet-ids "${SUBNET_IDS[@]}" \
+    --region "$REGION" >/dev/null
+fi
 
 #########################Creating_RDS#######################################################
 
@@ -41,7 +71,7 @@ aws rds create-db-instance \
   --master-username "$DB_USERNAME" \
   --master-user-password "$DB_PASSWORD" \
   --db-name "$DB_NAME" \
-  --vpc-security-group-ids "$DB_SECURITY_GROUP" \
+  --vpc-security-group-ids "$DB_SECURITY_GROUP_ID" \
   --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
   --backup-retention-period 1 \
   --no-publicly-accessible \
@@ -133,7 +163,7 @@ EOF
 
 #===============CREATION-EC2-Instance============
 
-EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID" --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-ids "$SECURITY_GROUP" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value="$EC2_NAME"},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
+EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --vpc  --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value="$EC2_NAME"},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
 
 
 ##GET Public IP####
