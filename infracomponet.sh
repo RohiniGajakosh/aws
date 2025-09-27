@@ -5,21 +5,28 @@ set -euo pipefail  ##If the script fails , stopt the exectution
 
 REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-0b3e7ba60fb94bf00"
+VPC_ID="vpc-0d0c517c28437f881"
 IGW_NAME="NewIGA"
+APP_TIER_A=subnet-0d0d678ced33022a5
+APP_TIER_B=subnet-0c1ebff0c313477b0
+DATA_TIER_A=subnet-020f3d4b1ea150dd8
+DATA_TIER_B=subnet-0406c2e3ce8655f6e
+PUB_TIER_A=subnet-0bd815874359ae949
+
 
 ###--------EC2 CONFIG--------------------
 
 AMI_ID="ami-08982f1c5bf93d976"
 INSTANCE_TYPE="t3.micro"
 KEY_PAIR="newkey"
-EC2_SECURITY_GROUP_NAME="default"
-SUBNET_ID="subnet-0a84f8e3f28830baf"
+EC2_SECURITY_GROUP_NAME="rohisg"
+EC2_SECURITY_GROUP_ID=<Id-here_sg>
+SUBNET_ID="$APP_TIER_A"
 EC2_NAME="neweraInstance"
 
 
 ## RDS Config=====================
-RDS_NAME="newdrdsbase"
+RDS_NAME="rohurds"
 DB_ENGINE=mysql
 DB_VERSION="8.0.42"
 DB_CLASS="db.t3.micro"
@@ -27,14 +34,14 @@ DB_NAME="databse"
 DB_USERNAME="rohini"
 DB_PASSWORD="RedhatRohini"
 DB_SECURITY_GROUP_NAME="default"
-DB_SUBNET_GROUP_NAME="rohupohu"
-SUBNET_IDS=(subnet-08a2dfbe354244295 subnet-0db0c08055de3e0b1)
+DB_SUBNET_GROUP_NAME="rohurdssubs"
+SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
 
 
 
 
 
-if aws rds describe-db-subnet-groups --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" --region "$REGION" >/dev/null 2>&1; then
+if aws rds describe-db-subnet-groups  --region "$REGION" >/dev/null 2>&1; then
 echo "Creating DB subnet group: $DB_SUBNET_GROUP_NAME"
 DB_SUBNET_GROUP_NAME=$(aws rds create-db-subnet-group \
     --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
@@ -47,8 +54,7 @@ echo "Createed DB subnetgroup: $DB_SUBNET_GROUP_NAME"
 else 
 echo "Db subnet group $DB_SUBNET_GROUP_NAME already exists"
 fi
-
-echo "Createed DB subnetgroup: $DB_SUBNET_GROUP_NAME
+echo "Createed DB subnetgroup: $DB_SUBNET_GROUP_NAME"
 
 
 #########################Creating_RDS#######################################################
@@ -153,7 +159,7 @@ EOF
 
 #===============CREATION-EC2-Instance============
 
-EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --vpc "$VPC_ID"  --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value="$EC2_NAME"},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
+EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --subnet-id "$SUBNET_ID" --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-id "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${EC2_NAME}},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
 
 
 ##GET Public IP####

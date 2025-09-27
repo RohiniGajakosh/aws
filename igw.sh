@@ -4,7 +4,7 @@ set -euo pipefail
 ##===============CONFIGURATION==========
 
 REGION="us-east-1"
-VPC_ID=vpc-0b3e7ba60fb94bf00
+VPC_ID=vpc-0d0c517c28437f881
 IGW_NAME="NewIGA"
 
 
