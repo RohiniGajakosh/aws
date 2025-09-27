@@ -5,7 +5,7 @@ set -euo pipefail  ##If the script fails , stopt the exectution
 
 REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-004bb88574d87fcf8"
+VPC_ID="vpc-0b3e7ba60fb94bf00"
 IGW_NAME="NewIGA"
 
 ###--------EC2 CONFIG--------------------
@@ -30,35 +30,26 @@ DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohupohu"
 SUBNET_IDS=(subnet-08a2dfbe354244295 subnet-0db0c08055de3e0b1)
 
-EC2_SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
-  --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=$EC2_SECURITY_GROUP_NAME" \
-  --region "$REGION" \
-  --query 'SecurityGroups[0].GroupId' \
-  --output text)
 
-DB_SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
-  --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=$DB_SECURITY_GROUP_NAME" \
-  --region "$REGION" \
-  --query 'SecurityGroups[0].GroupId' \
-  --output text)
 
-if [[ "$EC2_SECURITY_GROUP_ID" == "None" || -z "$EC2_SECURITY_GROUP_ID" ]]; then
-  echo "Failed to resolve EC2 security group '$EC2_SECURITY_GROUP_NAME' in VPC $VPC_ID" >&2
-  exit 1
-fi
 
-if [[ "$DB_SECURITY_GROUP_ID" == "None" || -z "$DB_SECURITY_GROUP_ID" ]]; then
-  echo "Failed to resolve DB security group '$DB_SECURITY_GROUP_NAME' in VPC $VPC_ID" >&2
-  exit 1
-fi
 
-if ! aws rds describe-db-subnet-groups --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" --region "$REGION" >/dev/null 2>&1; then
-  aws rds create-db-subnet-group \
+if aws rds describe-db-subnet-groups --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" --region "$REGION" >/dev/null 2>&1; then
+echo "Creating DB subnet group: $DB_SUBNET_GROUP_NAME"
+DB_SUBNET_GROUP_NAME=$(aws rds create-db-subnet-group \
     --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
     --db-subnet-group-description "Rohisubs" \
     --subnet-ids "${SUBNET_IDS[@]}" \
-    --region "$REGION" >/dev/null
+    --region "$REGION" \
+    --query "DBSubnetGroup.DBSubnetGroupName" \
+    --output text )
+echo "Createed DB subnetgroup: $DB_SUBNET_GROUP_NAME"
+else 
+echo "Db subnet group $DB_SUBNET_GROUP_NAME already exists"
 fi
+
+echo "Createed DB subnetgroup: $DB_SUBNET_GROUP_NAME
+
 
 #########################Creating_RDS#######################################################
 
@@ -71,7 +62,6 @@ aws rds create-db-instance \
   --master-username "$DB_USERNAME" \
   --master-user-password "$DB_PASSWORD" \
   --db-name "$DB_NAME" \
-  --vpc-security-group-ids "$DB_SECURITY_GROUP_ID" \
   --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
   --backup-retention-period 1 \
   --no-publicly-accessible \
@@ -163,12 +153,12 @@ EOF
 
 #===============CREATION-EC2-Instance============
 
-EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --vpc  --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value="$EC2_NAME"},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
+EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --vpc "$VPC_ID"  --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value="$EC2_NAME"},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
 
 
 ##GET Public IP####
 
-EC2_PUBLIC_IP=$( aws ec2 describe-instances  --instance-ids "$EC2_ID" --region $REGION --query "Reservations[0].Instances[0].PublicIpAddress"   --output text )
+EC2_PUBLIC_IP=$( aws ec2 describe-instances  --instance-ids "$EC2_ID" --region "$REGION" --query "Reservations[0].Instances[0].PublicIpAddress"   --output text )
 
 
 # ========= SUMMARY =========
