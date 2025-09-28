@@ -5,13 +5,57 @@ set -euo pipefail  ##If the script fails , stopt the exectution
 
 REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-0d0c517c28437f881"
+VPC_ID="vpc-088af6812214a208c"
 IGW_NAME="NewIGA"
-APP_TIER_A=subnet-0d0d678ced33022a5
-APP_TIER_B=subnet-0c1ebff0c313477b0
-DATA_TIER_A=subnet-020f3d4b1ea150dd8
-DATA_TIER_B=subnet-0406c2e3ce8655f6e
-PUB_TIER_A=subnet-0bd815874359ae949
+APP_TIER_A=subnet-080f0c73cf1d3656d
+APP_TIER_B=subnet-0662782d4c057c8f3
+DATA_TIER_A=subnet-06c129c365ad72007
+DATA_TIER_B=subnet-0dfa8c71517e87b41
+PUB_TIER_A=subnet-060c922c5b3c60967
+
+
+###===========================Security-Group-creation====================================
+
+EC2_SECURITY_GROUP_ID=$(aws ec2 create-security-group \
+    --group-name AllowAllSG \
+    --description "Allow all inbound and outbound traffic" \
+    --vpc-id $VPC_ID \
+    --region $REGION \
+    --query 'GroupId'  --output text )
+
+
+echo "The created security-group-ID is:  "$EC2_SECURITY_GROUP_ID" "
+
+
+aws ec2 authorize-security-group-ingress \
+    --group-id $EC2_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr 0.0.0.0/0 \
+    --region $REGION
+
+aws ec2 authorize-security-group-ingress \
+    --group-id $EC2_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr ::/0 \
+    --region $REGION
+
+echo "All the ports are open now for sg: $EC2_SECURITY_GROUP_ID "
+
+aws ec2 authorize-security-group-egress \
+    --group-id $EC2_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr 0.0.0.0/0 \
+    --region $REGION
+
+aws ec2 authorize-security-group-egress \
+    --group-id $EC2_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr ::/0 \
+    --region $REGION
 
 
 ###--------EC2 CONFIG--------------------
@@ -20,7 +64,7 @@ AMI_ID="ami-08982f1c5bf93d976"
 INSTANCE_TYPE="t3.micro"
 KEY_PAIR="newkey"
 EC2_SECURITY_GROUP_NAME="rohisg"
-EC2_SECURITY_GROUP_ID=<Id-here_sg>
+EC2_SECURITY_GROUP_ID="$EC2_SECURITY_GROUP_ID"
 SUBNET_ID="$APP_TIER_A"
 EC2_NAME="neweraInstance"
 
@@ -41,7 +85,7 @@ SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
 
 
 
-if aws rds describe-db-subnet-groups  --region "$REGION" >/dev/null 2>&1; then
+if ! aws rds describe-db-subnet-groups --db-subnet-group-name "$DB_SUBNET_GROUP_NAME"  --region "$REGION" >/dev/null 2>&1; then
 echo "Creating DB subnet group: $DB_SUBNET_GROUP_NAME"
 DB_SUBNET_GROUP_NAME=$(aws rds create-db-subnet-group \
     --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
@@ -70,7 +114,7 @@ aws rds create-db-instance \
   --db-name "$DB_NAME" \
   --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
   --backup-retention-period 1 \
-  --no-publicly-accessible \
+  --publicly-accessible \
   --region "$REGION" \
   --tags "Key=name,Value=${RDS_NAME}"
 
@@ -89,7 +133,7 @@ echo "RDS Instance ready at endpoint: $DB_ENDPOINT"
 ##===Creating the USer_Data===========
 
 ##=== Creating the User Data (with DB injected) ===========
-USER_DATA=$(cat <<EOF
+cat > user_data.sh <<'EOF'
 #!/bin/bash
 yum update -y
 amazon-linux-extras enable php7.4
@@ -153,13 +197,15 @@ PHPAPP
 chown apache:apache /var/www/html/index.php
 systemctl restart httpd
 EOF
-)
 
 
+####Saving a temp file for user_data
+
+echo "$USER_DATA" > user_data.sh
 
 #===============CREATION-EC2-Instance============
 
-EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --subnet-id "$SUBNET_ID" --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data "$USER_DATA" --security-group-id "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${EC2_NAME}},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
+EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --subnet-id "$SUBNET_ID" --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data file://user_data.sh --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${EC2_NAME}},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
 
 
 ##GET Public IP####
