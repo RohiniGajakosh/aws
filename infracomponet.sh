@@ -27,6 +27,8 @@ EC2_SECURITY_GROUP_ID=$(aws ec2 create-security-group \
 echo "The created security-group-ID is:  "$EC2_SECURITY_GROUP_ID" "
 
 
+
+
 aws ec2 authorize-security-group-ingress \
     --group-id $EC2_SECURITY_GROUP_ID \
     --protocol -1 \
@@ -34,28 +36,29 @@ aws ec2 authorize-security-group-ingress \
     --cidr 0.0.0.0/0 \
     --region $REGION
 
-aws ec2 authorize-security-group-ingress \
-    --group-id $EC2_SECURITY_GROUP_ID \
-    --protocol -1 \
-    --port -1 \
-    --cidr ::/0 \
-    --region $REGION
+#aws ec2 authorize-security-group-ingress \
+#    --group-id $EC2_SECURITY_GROUP_ID \
+#    --protocol -1 \
+#    --port -1 \
+#    --cidr ::/0 \
+#    --region $REGION
 
 echo "All the ports are open now for sg: $EC2_SECURITY_GROUP_ID "
 
-aws ec2 authorize-security-group-egress \
-    --group-id $EC2_SECURITY_GROUP_ID \
-    --protocol -1 \
-    --port -1 \
-    --cidr 0.0.0.0/0 \
-    --region $REGION
+#aws ec2 authorize-security-group-egress \
+#    --group-id $EC2_SECURITY_GROUP_ID \
+#    --protocol -1 \
+#    --port -1 \
+#    --cidr 0.0.0.0/0 \
+#    --region $REGION
 
-aws ec2 authorize-security-group-egress \
-    --group-id $EC2_SECURITY_GROUP_ID \
-    --protocol -1 \
-    --port -1 \
-    --cidr ::/0 \
-    --region $REGION
+#aws ec2 authorize-security-group-egress \
+#    --group-id $EC2_SECURITY_GROUP_ID \
+#    --protocol -1 \
+#    --port -1 \
+#    --cidr ::/0 \
+#    --region $REGION
+
 
 
 ###--------EC2 CONFIG--------------------
@@ -63,7 +66,6 @@ aws ec2 authorize-security-group-egress \
 AMI_ID="ami-08982f1c5bf93d976"
 INSTANCE_TYPE="t3.micro"
 KEY_PAIR="newkey"
-EC2_SECURITY_GROUP_NAME="rohisg"
 EC2_SECURITY_GROUP_ID="$EC2_SECURITY_GROUP_ID"
 SUBNET_ID="$APP_TIER_A"
 EC2_NAME="neweraInstance"
@@ -81,19 +83,27 @@ DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohurdssubs"
 SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
 
+# Enable DNS support
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-support
 
+# Enable DNS hostnames
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-hostnames
 
 
 
 if ! aws rds describe-db-subnet-groups --db-subnet-group-name "$DB_SUBNET_GROUP_NAME"  --region "$REGION" >/dev/null 2>&1; then
 echo "Creating DB subnet group: $DB_SUBNET_GROUP_NAME"
-DB_SUBNET_GROUP_NAME=$(aws rds create-db-subnet-group \
+aws rds create-db-subnet-group \
     --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
     --db-subnet-group-description "Rohisubs" \
     --subnet-ids "${SUBNET_IDS[@]}" \
     --region "$REGION" \
     --query "DBSubnetGroup.DBSubnetGroupName" \
-    --output text )
+    --output text
 echo "Createed DB subnetgroup: $DB_SUBNET_GROUP_NAME"
 else 
 echo "Db subnet group $DB_SUBNET_GROUP_NAME already exists"
@@ -123,7 +133,7 @@ aws rds create-db-instance \
 echo "Waiting for Db to become avilable"
 aws rds wait db-instance-available --db-instance-identifier "$RDS_NAME" --region "$REGION"
 
-###=================Get the RDs endpoint########################33
+###=================Get the RDs endpoint########################
 
 DB_ENDPOINT=$( aws rds describe-db-instances --db-instance-identifier "$RDS_NAME" --region "$REGION"  --query "DBInstances[0].Endpoint.Address"  --output text )
 
@@ -201,7 +211,7 @@ EOF
 
 ####Saving a temp file for user_data
 
-echo "$USER_DATA" > user_data.sh
+
 
 #===============CREATION-EC2-Instance============
 
