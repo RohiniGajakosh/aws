@@ -5,13 +5,13 @@ set -euo pipefail  ##If the script fails , stopt the exectution
 
 REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-088af6812214a208c"
-IGW_NAME="NewIGA"
-APP_TIER_A=subnet-080f0c73cf1d3656d
-APP_TIER_B=subnet-0662782d4c057c8f3
-DATA_TIER_A=subnet-06c129c365ad72007
-DATA_TIER_B=subnet-0dfa8c71517e87b41
-PUB_TIER_A=subnet-060c922c5b3c60967
+VPC_ID="vpc-063e91cb522d62f76"
+IGW_NAME="MyIGA"
+APP_TIER_A=subnet-02cc76edd5d62a81b
+APP_TIER_B=subnet-05fa0a1e90f37acfe
+DATA_TIER_A=subnet-0307de9e020c8d3cd
+DATA_TIER_B=subnet-060622f94c02545ad
+PUB_TIER_A=subnet-0baa2e0dfd37ca274
 
 
 ###===========================Security-Group-creation====================================
@@ -69,6 +69,7 @@ KEY_PAIR="newkey"
 EC2_SECURITY_GROUP_ID="$EC2_SECURITY_GROUP_ID"
 SUBNET_ID="$APP_TIER_A"
 EC2_NAME="neweraInstance"
+SSMROLE=ssmagentRole
 
 
 ## RDS Config=====================
@@ -78,7 +79,7 @@ DB_VERSION="8.0.42"
 DB_CLASS="db.t3.micro"
 DB_NAME="databse"
 DB_USERNAME="rohini"
-DB_PASSWORD="RedhatRohini"
+DB_PASSWORD="redhatrohini"
 DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohurdssubs"
 SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
@@ -143,15 +144,30 @@ echo "RDS Instance ready at endpoint: $DB_ENDPOINT"
 ##===Creating the USer_Data===========
 
 ##=== Creating the User Data (with DB injected) ===========
+
 cat > user_data.sh <<'EOF'
 #!/bin/bash
-yum update -y
-amazon-linux-extras enable php7.4
-yum install -y httpd php php-mysqlnd
-systemctl start httpd
-systemctl enable httpd
+set -euxo pipefail
+exec > >(tee /var/log/user-data.log | logger -t user-data -s) 2>&1
 
-cat <<'PHPAPP' > /var/www/html/index.php
+echo "[user-data] Starting bootstrap at $(date --iso-8601=seconds)"
+
+if ! command -v dnf >/dev/null 2>&1; then
+  echo "[user-data] dnf not found; this script expects Amazon Linux 2023" >&2
+  exit 1
+fi
+
+dnf -y update
+dnf -y install httpd php php-cli php-mysqlnd
+
+systemctl enable --now httpd
+
+cat <<'PHPINFO' >/var/www/html/info.php
+<?php
+phpinfo();
+PHPINFO
+
+cat <<'PHPAPP' >/var/www/html/index.php
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -162,9 +178,9 @@ cat <<'PHPAPP' > /var/www/html/index.php
     header { padding:40px; background:rgba(0,0,0,0.5); }
     h1 { font-size:3em; margin:0; }
     p { font-size:1.2em; }
-    .card { background:white; color:#333; margin:40px auto; padding:20px; border-radius:12px; max-width:600px; box-shadow:0px 4px 20px rgba(0,0,0,0.3);}
-    img { max-width:100%; border-radius:12px;}
-    footer { padding:20px; background:rgba(0,0,0,0.4); margin-top:40px;}
+    .card { background:white; color:#333; margin:40px auto; padding:20px; border-radius:12px; max-width:600px; box-shadow:0px 4px 20px rgba(0,0,0,0.3); }
+    img { max-width:100%; border-radius:12px; }
+    footer { padding:20px; background:rgba(0,0,0,0.4); margin-top:40px; }
   </style>
 </head>
 <body>
@@ -172,31 +188,35 @@ cat <<'PHPAPP' > /var/www/html/index.php
     <h1>🌐 My AWS Dynamic Website</h1>
     <p>Running on EC2 + RDS</p>
   </header>
-
   <div class="card">
     <img src="https://source.unsplash.com/800x400/?nature,technology" alt="Banner Image">
     <h2>Hello from EC2!</h2>
     <p>
       <?php
-        \$servername = "$DB_ENDPOINT";
-        \$username = "$DB_USERNAME";
-        \$password = "$DB_PASSWORD";
-        \$dbname = "$DB_NAME";
+        mysqli_report(MYSQLI_REPORT_OFF);
+        $servername = PHP_DB_HOST;
+        $username   = PHP_DB_USER;
+        $password   = PHP_DB_PASS;
+        $dbname     = PHP_DB_NAME;
 
-        \$conn = new mysqli(\$servername, \$username, \$password, \$dbname);
-        if (\$conn->connect_error) {
-          echo "❌ Database connection failed: " . \$conn->connect_error;
+        $conn = @mysqli_connect($servername, $username, $password, $dbname);
+        if (!$conn) {
+          echo '❌ Database connection failed: ' . htmlspecialchars(mysqli_connect_error(), ENT_QUOTES, 'UTF-8');
         } else {
-          echo "✅ Connected to database: " . \$dbname . "<br>";
-          \$result = \$conn->query("SELECT NOW() as nowtime");
-          \$row = \$result->fetch_assoc();
-          echo "⏰ Current DB time: " . \$row['nowtime'];
-          \$conn->close();
+          echo '✅ Connected to database: ' . htmlspecialchars($dbname, ENT_QUOTES, 'UTF-8') . '<br>';
+          $result = mysqli_query($conn, 'SELECT NOW() AS nowtime');
+          if ($result) {
+            $row = mysqli_fetch_assoc($result);
+            if ($row && isset($row['nowtime'])) {
+              echo '⏰ Current DB time: ' . htmlspecialchars($row['nowtime'], ENT_QUOTES, 'UTF-8');
+            }
+            mysqli_free_result($result);
+          }
+          mysqli_close($conn);
         }
       ?>
     </p>
   </div>
-
   <footer>
     <p>🚀 Powered by AWS | EC2 + RDS + Apache + PHP</p>
   </footer>
@@ -204,18 +224,52 @@ cat <<'PHPAPP' > /var/www/html/index.php
 </html>
 PHPAPP
 
-chown apache:apache /var/www/html/index.php
+cat <<'ENVFILE' >/etc/profile.d/app-env.sh
+export DB_HOST=DB_HOST_ENV
+export DB_USER=DB_USER_ENV
+export DB_PASS=DB_PASS_ENV
+export DB_NAME=DB_NAME_ENV
+ENVFILE
+
+chown apache:apache /var/www/html/index.php /var/www/html/info.php
+chmod 644 /var/www/html/*.php
+
 systemctl restart httpd
+
+curl -fsS http://127.0.0.1/ | head -n 20 || true
+curl -fsS http://127.0.0.1/info.php | head -n 20 || true
+systemctl status httpd --no-pager || true
+
+echo "[user-data] Completed at $(date --iso-8601=seconds)"
 EOF
 
+export DB_ENDPOINT DB_NAME DB_USERNAME DB_PASSWORD
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+import shlex
 
-####Saving a temp file for user_data
+values = {
+    'PHP_DB_HOST': json.dumps(os.environ['DB_ENDPOINT']),
+    'PHP_DB_NAME': json.dumps(os.environ['DB_NAME']),
+    'PHP_DB_USER': json.dumps(os.environ['DB_USERNAME']),
+    'PHP_DB_PASS': json.dumps(os.environ['DB_PASSWORD']),
+    'DB_HOST_ENV': shlex.quote(os.environ['DB_ENDPOINT']),
+    'DB_NAME_ENV': shlex.quote(os.environ['DB_NAME']),
+    'DB_USER_ENV': shlex.quote(os.environ['DB_USERNAME']),
+    'DB_PASS_ENV': shlex.quote(os.environ['DB_PASSWORD']),
+}
 
-
-
+path = Path('user_data.sh')
+text = path.read_text()
+for placeholder, value in values.items():
+    text = text.replace(placeholder, value)
+path.write_text(text)
+PY
 #===============CREATION-EC2-Instance============
 
-EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --subnet-id "$SUBNET_ID" --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data file://user_data.sh --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${EC2_NAME}},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
+EC2_ID=$( aws ec2 run-instances --image-id "$AMI_ID"  --subnet-id "$SUBNET_ID" --iam-instance-profile Name="$SSMROLE" --region "$REGION" --instance-type "$INSTANCE_TYPE" --key-name "$KEY_PAIR" --user-data file://user_data.sh --security-group-ids "$EC2_SECURITY_GROUP_ID" --associate-public-ip-address --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${EC2_NAME}},{Key=Region,Value=us-east-1}]" --query "Instances[0].InstanceId" --output text )
 
 
 ##GET Public IP####

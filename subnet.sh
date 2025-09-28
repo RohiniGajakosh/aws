@@ -1,23 +1,37 @@
 
 #!/bin/bash
 set -euo pipefail
-REGION="us-east-1"
+read -rp "Enter AWS region (default: us-east-1): " REGION
+REGION=${REGION:-us-east-1}
+
+read -rp "Enter VPC CIDR (default: 10.0.0.0/16): " VPC_CIDR
+VPC_CIDR=${VPC_CIDR:-10.0.0.0/16}
+
+
 export AWS_PAGER=""  # disable CLI pager so script runs non-interactively
 
 my_vpc=$( aws ec2 create-vpc \
-  --cidr-block 10.0.0.0/16 \
-  --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=NewVPC},{Key=Region,Value=us-east-1}]' \
+  --cidr-block $VPC_CIDR \
+  --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=NewVPC},{Key=Region,Value="$REGION"}]" \
   --region "$REGION" \
   --query 'Vpc.VpcId' \
   --output text )
 
+echo "Created VPC $my_vpc with CIDR $VPC_CIDR"
 
-aws ec2 create-subnet --vpc-id $my_vpc --cidr-block 10.0.0.0/24 --availability-zone us-east-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=AppSubnet},{Key=Region,Value=us-east-1}]' --region "$REGION"
+###Let's createa the freakin subnets
 
-aws ec2 create-subnet --vpc-id $my_vpc --cidr-block 10.0.1.0/24 --availability-zone us-east-1b --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=AppSubnet},{Key=Region,Value=us-east-1}]' --region "$REGION"
+BASE_PREFIX=$(echo "$VPC_CIDR" | cut -d. -f1-2)
 
-aws ec2 create-subnet --vpc-id $my_vpc --cidr-block 10.0.2.0/24 --availability-zone us-east-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=Datasubnet},{Key=Region,Value=us-east-1}]' --region "$REGION"
+aws ec2 create-subnet --vpc-id $my_vpc --cidr-block "$BASE_PREFIX.0.0/24" --availability-zone ${REGION}a --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=AppSubnet},{Key=Region,Value="$REGION"}]" --region "$REGION"
 
-aws ec2 create-subnet --vpc-id $my_vpc --cidr-block 10.0.3.0/24 --availability-zone us-east-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=PublicSubnet},{Key=Region,Value=us-east-1}]' --region "$REGION"
+aws ec2 create-subnet --vpc-id $my_vpc --cidr-block "$BASE_PREFIX.1.0/24" --availability-zone ${REGION}b --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=AppSubnet},{Key=Region,Value="$REGION"}]" --region "$REGION"
 
-aws ec2 create-subnet --vpc-id $my_vpc --cidr-block 10.0.4.0/24 --availability-zone us-east-1b --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=Datasubnet},{Key=Region,Value=us-east-1}]' --region "$REGION"
+aws ec2 create-subnet --vpc-id $my_vpc --cidr-block "$BASE_PREFIX.2.0/24" --availability-zone ${REGION}a --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=Datasubnet},{Key=Region,Value="$REGION"}]" --region "$REGION"
+
+aws ec2 create-subnet --vpc-id $my_vpc --cidr-block "$BASE_PREFIX.3.0/24" --availability-zone ${REGION}b --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=PublicSubnet},{Key=Region,Value="$REGION"}]" --region "$REGION"
+
+aws ec2 create-subnet --vpc-id $my_vpc --cidr-block "$BASE_PREFIX.4.0/24" --availability-zone ${REGION}a --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=Datasubnet},{Key=Region,Value="$REGION"}]" --region "$REGION"
+
+
+echo "please run igw.sh script next" 
