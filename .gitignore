@@ -1,0 +1,6 @@
+# Ignore private key material
+*.pem
+*.ppk
+
+# Editor settings
+.vscode/

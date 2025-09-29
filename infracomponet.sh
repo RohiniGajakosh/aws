@@ -5,29 +5,35 @@ set -euo pipefail  ##If the script fails , stopt the exectution
 
 REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-063e91cb522d62f76"
-IGW_NAME="MyIGA"
-APP_TIER_A=subnet-02cc76edd5d62a81b
-APP_TIER_B=subnet-05fa0a1e90f37acfe
-DATA_TIER_A=subnet-0307de9e020c8d3cd
-DATA_TIER_B=subnet-060622f94c02545ad
-PUB_TIER_A=subnet-0baa2e0dfd37ca274
-
+VPC_ID="vpc-0e187181e0d0904f3"
+IGW_NAME="AppIGA"
+APP_TIER_A=subnet-0b6494934bac42782
+APP_TIER_B=subnet-0a947a3779bd7ab0d
+DATA_TIER_A=subnet-01fa2445e92f2d62e
+DATA_TIER_B=subnet-02d4fc65e589f6164
+PUB_TIER_A=subnet-02324b874e033fdb4
+CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
 
 ###===========================Security-Group-creation====================================
 
 EC2_SECURITY_GROUP_ID=$(aws ec2 create-security-group \
     --group-name AllowAllSG \
-    --description "Allow all inbound and outbound traffic" \
+    --description "Allow all inbound and outbound traffic for EC2" \
     --vpc-id $VPC_ID \
     --region $REGION \
     --query 'GroupId'  --output text )
 
+RDS_SECURITY_GROUP_ID=$(aws ec2 create-security-group \
+    --group-name AllowRDSSG \
+    --description "Allow all inbound and outbound traffic for RDS" \
+    --vpc-id $VPC_ID \
+    --region $REGION \
+    --query 'GroupId'  --output text )
 
-echo "The created security-group-ID is:  "$EC2_SECURITY_GROUP_ID" "
+echo -e "The created security-group-ID is: \033[0;32m$EC2_SECURITY_GROUP_ID\033[0m"
 
 
-
+echo -e "The CIDR block for VPC \033[0;36m$VPC_ID\033[0m is \033[0;36m$CIDR\033[0m"
 
 aws ec2 authorize-security-group-ingress \
     --group-id $EC2_SECURITY_GROUP_ID \
@@ -35,6 +41,15 @@ aws ec2 authorize-security-group-ingress \
     --port -1 \
     --cidr 0.0.0.0/0 \
     --region $REGION
+
+
+aws ec2 authorize-security-group-ingress \
+    --group-id $RDS_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr $CIDR \
+    --region $REGION
+
 
 #aws ec2 authorize-security-group-ingress \
 #    --group-id $EC2_SECURITY_GROUP_ID \
@@ -59,6 +74,12 @@ echo "All the ports are open now for sg: $EC2_SECURITY_GROUP_ID "
 #    --cidr ::/0 \
 #    --region $REGION
 
+aws ec2 authorize-security-group-egress \
+    --group-id $RDS_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr 0.0.0.0/0 \
+    --region $REGION
 
 
 ###--------EC2 CONFIG--------------------
@@ -124,6 +145,7 @@ aws rds create-db-instance \
   --master-user-password "$DB_PASSWORD" \
   --db-name "$DB_NAME" \
   --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
+  --vpc-security-group-ids "$RDS_SECURITY_GROUP_ID" \
   --backup-retention-period 1 \
   --publicly-accessible \
   --region "$REGION" \
