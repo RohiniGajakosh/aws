@@ -5,13 +5,23 @@ set -euo pipefail  ##If the script fails , stopt the exectution
 
 REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-0e187181e0d0904f3"
-IGW_NAME="AppIGA"
-APP_TIER_A=subnet-0b6494934bac42782
-APP_TIER_B=subnet-0a947a3779bd7ab0d
-DATA_TIER_A=subnet-01fa2445e92f2d62e
-DATA_TIER_B=subnet-02d4fc65e589f6164
-PUB_TIER_A=subnet-02324b874e033fdb4
+VPC_ID="vpc-0fa1a62f8f61b0625"
+IGW_NAME="rohuvpc"
+
+
+##=======Gettinfg the subnet for better script flow=====================
+
+#aws ec2 describe-subnets\
+#    --filters "Name=vpc-id,Values=vpc-0fa1a62f8f61b0625" \
+#    --query "Subnets[*].{SubnetId:SubnetId, CIDR: CidrBlock, AZ:AvailabilityZone, Name: Tags[?Key=='Name']|[0].Value}" \
+#    --output text
+
+APP_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId")
+APP_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId")
+DATA_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId")
+DATA_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId")
+PUB_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=PublicSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId")
+
 CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
 
 ###===========================Security-Group-creation====================================
@@ -73,13 +83,13 @@ echo "All the ports are open now for sg: $EC2_SECURITY_GROUP_ID "
 #    --port -1 \
 #    --cidr ::/0 \
 #    --region $REGION
-
-aws ec2 authorize-security-group-egress \
-    --group-id $RDS_SECURITY_GROUP_ID \
-    --protocol -1 \
-    --port -1 \
-    --cidr 0.0.0.0/0 \
-    --region $REGION
+#
+#aws ec2 authorize-security-group-egress \
+#    --group-id $RDS_SECURITY_GROUP_ID \
+#    --protocol -1 \
+#    --port -1 \
+#    --cidr 0.0.0.0/0 \
+#    --region $REGION
 
 
 ###--------EC2 CONFIG--------------------
@@ -89,18 +99,29 @@ INSTANCE_TYPE="t3.micro"
 KEY_PAIR="newkey"
 EC2_SECURITY_GROUP_ID="$EC2_SECURITY_GROUP_ID"
 SUBNET_ID="$APP_TIER_A"
-EC2_NAME="neweraInstance"
+
+read -rp "Enter the Instance_Name(default: neweraInstance): " EC2_NAME
+EC2_NAME=${EC2_NAME:-neweraInstance}
 SSMROLE=ssmagentRole
 
 
 ## RDS Config=====================
-RDS_NAME="rohurds"
+read -rp "Enter the RDS Name(default: rohurds): " RDS_NAME
+RDS_NAME=${RDS_NAME:-rohurds}
+
 DB_ENGINE=mysql
 DB_VERSION="8.0.42"
 DB_CLASS="db.t3.micro"
 DB_NAME="databse"
-DB_USERNAME="rohini"
-DB_PASSWORD="redhatrohini"
+
+read -rp "Enter the DB Username(default: rohini): " DB_USERNAME
+DB_USERNAME=${DB_USERNAME:-rohurds}
+
+
+
+read -rs "Enter the DB Password(default: redhatrohini): " DB_PASSWORD
+DB_PASSWORD=${DB_PASSWORD:-redhatrohini}
+
 DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohurdssubs"
 SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
