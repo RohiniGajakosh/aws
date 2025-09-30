@@ -16,11 +16,18 @@ IGW_NAME="rohuvpc"
 #    --query "Subnets[*].{SubnetId:SubnetId, CIDR: CidrBlock, AZ:AvailabilityZone, Name: Tags[?Key=='Name']|[0].Value}" \
 #    --output text
 
-APP_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId")
-APP_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId")
-DATA_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId")
-DATA_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId")
-PUB_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=PublicSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId")
+APP_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId" --output text)
+APP_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId" --output text )
+DATA_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId" --output text)
+DATA_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId" --output text )
+PUB_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=PublicSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId" --output text)
+
+echo $APP_TIER_A
+echo $APP_TIER_B
+echo $DATA_TIER_A
+echo $DATA_TIER_B
+echo $PUB_TIER_A
+
 
 CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
 
@@ -119,12 +126,14 @@ DB_USERNAME=${DB_USERNAME:-rohurds}
 
 
 
-read -rs "Enter the DB Password(default: redhatrohini): " DB_PASSWORD
+read -rsp "Enter the DB Password(default: redhatrohini): " DB_PASSWORD
 DB_PASSWORD=${DB_PASSWORD:-redhatrohini}
 
 DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohurdssubs"
 SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
+
+echo "$SUBNET_ID"
 
 # Enable DNS support
 aws ec2 modify-vpc-attribute \
