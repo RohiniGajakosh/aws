@@ -1,4 +1,7 @@
 #!/bin/bash
+
+source= /mnt/c/shellpractice/loadb.sh
+
 set -euo pipefail  ## If the script fails, it will exit immediately
 
 source /mnt/c/shellpractice/variable.sh
@@ -80,6 +83,7 @@ aws autoscaling create-auto-scaling-group \
   --max-size $MAX_SIZE \
   --desired-capacity $DESIRED_CAPACITY \
   --vpc-zone-identifier "$SUBNET_IDS" \
+  --target-group-arns "$TARGET_GROUP" \
   --region "$REGION"
 
 

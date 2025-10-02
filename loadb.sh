@@ -64,6 +64,6 @@ LISTNER=$(aws elbv2 create-listener --load-balancer-arn $Load_BALANCER --protoco
  echo "The created Listener ARN is: $LISTNER"
 
 
-REGISTER=$(aws elbv2 register-targets --target-group-arn $TARGET_GROUP --targets Id=$instanceid1 Id=$instanceid2 --region $REGION )
+
 
 
