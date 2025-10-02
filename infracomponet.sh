@@ -134,7 +134,7 @@ if [[ ${#DB_PASSWORD} -lt 8 ]]; then
     echo "Password must be at least 8 characters long. Please try again."
     continue
 fi
-read -rps "Confirm Password: " DB_PASSWORD_CONFIRM
+read -rsp "Confirm Password: " DB_PASSWORD_CONFIRM
 echo
 if [[ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]]; then
     echo "Passwords do not match. Please try again."
