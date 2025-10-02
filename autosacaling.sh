@@ -12,26 +12,40 @@ LAUNCH_TEMPLATE=${LAUNCH_TEMPLATE:-ASGLaunchTemplate}
 read -rp "Enter AWS region (default: us-east-1): " REGION
 REGION=${REGION:-us-east-1}
 
-KEY_PAIR=$( aws ec2 describe-instances --instance-ids $InstanceId --region $REGION --query 'Reservations[*].Instances[*].KeyName' --output text)
-EC2_NAME="neweraInstance"
+KEY_PAIR=$(aws ec2 describe-instances --instance-ids "$InstanceId" --region "$REGION" --query 'Reservations[0].Instances[0].KeyName' --output text)
+INSTANCE_TYPE=$(aws ec2 describe-instances --instance-ids "$InstanceId" --region "$REGION" --query 'Reservations[0].Instances[0].InstanceType' --output text)
+
+if [ "$KEY_PAIR" = "None" ]; then
+  KEY_PAIR=""
+fi
+
+if [ -z "$INSTANCE_TYPE" ] || [ "$INSTANCE_TYPE" = "None" ]; then
+  echo "Unable to determine instance type for instance $InstanceId in region $REGION."
+  exit 1
+fi
+
 
 #================== Update with your VPC subnet IDs ================
 
 
 ensure_sg_id() {
-  local sg_id=$(aws ec2 describe-security-groups --filters Name=group-name,Values="$EC2_SECURITY_GROUP_ID" --query 'SecurityGroups[0].GroupId' --output text --region "$REGION")
-  if [ -z "$sg_id" ]; then
-    echo "Security group $sg_name not found. Please create it first."
+  local sg_id
+
+  sg_id=$(aws ec2 describe-security-groups --group-ids "$sg_id" --query 'SecurityGroups[0].GroupId' --output text --region "$REGION" 2>/dev/null || true)
+
+  if [ -z "$sg_id" ] || [ "$sg_id" = "None" ]; then
+    echo "Security group $lookup_value not found. Please create it first."
     exit 1
-  else
-    echo The security group existing id is: $sg_id
   fi
+
+  echo "The security group existing id is: $sg_id"
+  SECURITY_GROUP_ID="$sg_id"
 }
 ensure_sg_id "$EC2_SECURITY_GROUP_ID"
 
 
-# Encode user data file
-USERDATA=$(base64 -w0 user_data.sh) ## -w0 to avoid line breaks in the output
+### Encode user data file
+##USERDATA=$(base64 -w0 user_data.sh) ## -w0 to avoid line breaks in the output
 
 #============Creating Launch Template==============
 
@@ -41,25 +55,9 @@ echo "Creating Launch Template: $LAUNCH_TEMPLATE"
 
 aws ec2 create-launch-template \
   --launch-template-name "$LAUNCH_TEMPLATE" \
-  --region "$REGION" \
-  --version-description "Initial-version" \
-  --launch-template-data "{
-    \"ImageId\": \"$AMI\",
-    \"InstanceType\": \"t3.micro\",
-    \"KeyName\": \"$KEY_PAIR\",
-    \"SecurityGroupIds\": [\"$EC2_SECURITY_GROUP_ID\"],
-    \"UserData\": \"$USERDATA\",
-    \"TagSpecifications\": [{
-        \"ResourceType\": \"instance\",
-        \"Tags\": [
-          {\"Key\": \"Name\", \"Value\": \"$EC2_NAME\"},
-          {\"Key\": \"Region\", \"Value\": \"$REGION\"}
-        ]
-    }],
-    \"Monitoring\": {
-      \"Enabled\": true
-    }
-  }"
+  --version-description "Initial_Version" \
+  --launch-template-data "$(aws ec2 describe-instances --instance-ids $InstanceId --query 'Reservations[0].Instances[0]' --output json)" \
+  --region "$REGION"
 
 
 echo " Launch Template $LAUNCH_TEMPLATE created."
@@ -76,6 +74,13 @@ aws autoscaling create-auto-scaling-group \
   --max-size $MAX_SIZE \
   --desired-capacity $DESIRED_CAPACITY \
   --vpc-zone-identifier "$SUBNET_IDS" \
+  --region "$REGION"
+
+
+
+aws autoscaling attach-instances \
+  --instance-ids "$InstanceId" \
+  --auto-scaling-group-name "$ASG_NAME" \
   --region "$REGION"
 
 echo "Auto Scaling Group $ASG_NAME created with desired capacity $DESIRED_CAPACITY"
