@@ -1,6 +1,7 @@
 #!/bin/bash
-set -euo pipefail
+set -euo pipefail  ## If the script fails, it will exit immediately
 
+export AWS_PAGER=""   ## disable CLI pager so script runs non-interactively
 ##==============Variable for Launch Template==================
 
 read -rp "Enter the name of Launch Template (default: ASGLaunchTemplate): " LAUNCH_TEMPLATE
@@ -9,14 +10,24 @@ LAUNCH_TEMPLATE=${LAUNCH_TEMPLATE:-ASGLaunchTemplate}
 read -rp "Enter AWS region (default: us-east-1): " REGION
 REGION=${REGION:-us-east-1}
 
-KEY_PAIR="newkey"
+KEY_PAIR=$( aws ec2 describe-instances --instance-ids <instance-id> --region $REGION --query 'Reservations[*].Instances[*].KeyName' --output text)
 EC2_NAME="neweraInstance"
-ASG_NAME="MyAutoScalingGroup"
-EC2_SECURITY_GROUP_ID=
+ASG_NAME=$LAUNCH_TEMPLATE
+EC2_SECURITY_GROUP_ID=$1 
 
 #================== Update with your VPC subnet IDs ================
 SUBNET_IDS="subnet-080f0c73cf1d3656d,subnet-0662782d4c057c8f3"
 
+ensure_sg_id() {
+  local sg_name=$1
+  local sg_id=$(aws ec2 describe-security-groups --filters Name=group-name,Values="$EC2_SECURITY_GROUP_ID" --query 'SecurityGroups[0].GroupId' --output text --region "$REGION")
+  if [ -z "$sg_id" ]; then;
+    echo "Security group $sg_name not found. Please create it first."
+    exit 1
+  else
+    echo The security group existing id is: $sg_id
+  fi
+}
 
 # Scaling configuration
 MIN_SIZE=1
