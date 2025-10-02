@@ -1,11 +1,11 @@
 #!/bin/bash
+
+source /mnt/c/shellpractice/variable.sh
+
 set -euo pipefail  ##If the script fails , stopt the exectution
 
-##===============CONFIGURATION==========
-
-REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-0fa1a62f8f61b0625"
+
 IGW_NAME="rohuvpc"
 
 
@@ -101,15 +101,13 @@ echo "All the ports are open now for sg: $EC2_SECURITY_GROUP_ID "
 
 ###--------EC2 CONFIG--------------------
 
-AMI_ID="ami-08982f1c5bf93d976"
-INSTANCE_TYPE="t3.micro"
-KEY_PAIR="newkey"
+
 EC2_SECURITY_GROUP_ID="$EC2_SECURITY_GROUP_ID"
 SUBNET_ID="$APP_TIER_A"
 
 read -rp "Enter the Instance_Name(default: neweraInstance): " EC2_NAME
 EC2_NAME=${EC2_NAME:-neweraInstance}
-SSMROLE=ssmagentRole
+
 
 
 ## RDS Config=====================
@@ -126,8 +124,25 @@ DB_USERNAME=${DB_USERNAME:-rohurds}
 
 
 
+while true; do
 read -rsp "Enter the DB Password(default: redhatrohini): " DB_PASSWORD
+echo
+
 DB_PASSWORD=${DB_PASSWORD:-redhatrohini}
+
+if [[ ${#DB_PASSWORD} -lt 8 ]]; then
+    echo "Password must be at least 8 characters long. Please try again."
+    continue
+fi
+read -rps "Confirm Password: " DB_PASSWORD_CONFIRM
+echo
+if [[ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]]; then
+    echo "Passwords do not match. Please try again."
+   continue
+fi
+echo "Password accepted"
+break
+done
 
 DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohurdssubs"
