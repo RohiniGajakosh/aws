@@ -1,33 +1,56 @@
 #!/bin/bash
+
+source /mnt/c/shellpractice/variable.sh
+
 set -euo pipefail  ##If the script fails , stopt the exectution
 
-##===============CONFIGURATION==========
-
-REGION="us-east-1"
 export AWS_PAGER=""  # prevent AWS CLI from opening a pager mid-script
-VPC_ID="vpc-063e91cb522d62f76"
-IGW_NAME="MyIGA"
-APP_TIER_A=subnet-02cc76edd5d62a81b
-APP_TIER_B=subnet-05fa0a1e90f37acfe
-DATA_TIER_A=subnet-0307de9e020c8d3cd
-DATA_TIER_B=subnet-060622f94c02545ad
-PUB_TIER_A=subnet-0baa2e0dfd37ca274
 
+IGW_NAME="rohuvpc"
+
+
+##=======Gettinfg the subnet for better script flow=====================
+
+#aws ec2 describe-subnets\
+#    --filters "Name=vpc-id,Values=vpc-0fa1a62f8f61b0625" \
+#    --query "Subnets[*].{SubnetId:SubnetId, CIDR: CidrBlock, AZ:AvailabilityZone, Name: Tags[?Key=='Name']|[0].Value}" \
+#    --output text
+
+APP_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId" --output text)
+APP_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=AppSubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId" --output text )
+DATA_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId" --output text)
+DATA_TIER_B=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=Datasubnet" "Name=tag:Region,Values=us-east-1b"  --query "Subnets[*].SubnetId" --output text )
+PUB_TIER_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values="$VPC_ID"" "Name=tag:Name,Values=PublicSubnet" "Name=tag:Region,Values=us-east-1a"  --query "Subnets[*].SubnetId" --output text)
+
+echo $APP_TIER_A
+echo $APP_TIER_B
+echo $DATA_TIER_A
+echo $DATA_TIER_B
+echo $PUB_TIER_A
+
+
+CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
 
 ###===========================Security-Group-creation====================================
 
 EC2_SECURITY_GROUP_ID=$(aws ec2 create-security-group \
     --group-name AllowAllSG \
-    --description "Allow all inbound and outbound traffic" \
+    --description "Allow all inbound and outbound traffic for EC2" \
     --vpc-id $VPC_ID \
     --region $REGION \
     --query 'GroupId'  --output text )
 
+RDS_SECURITY_GROUP_ID=$(aws ec2 create-security-group \
+    --group-name AllowRDSSG \
+    --description "Allow all inbound and outbound traffic for RDS" \
+    --vpc-id $VPC_ID \
+    --region $REGION \
+    --query 'GroupId'  --output text )
 
-echo "The created security-group-ID is:  "$EC2_SECURITY_GROUP_ID" "
+echo -e "The created security-group-ID is: \033[0;32m$EC2_SECURITY_GROUP_ID\033[0m"
 
 
-
+echo -e "The CIDR block for VPC \033[0;36m$VPC_ID\033[0m is \033[0;36m$CIDR\033[0m"
 
 aws ec2 authorize-security-group-ingress \
     --group-id $EC2_SECURITY_GROUP_ID \
@@ -35,6 +58,15 @@ aws ec2 authorize-security-group-ingress \
     --port -1 \
     --cidr 0.0.0.0/0 \
     --region $REGION
+
+
+aws ec2 authorize-security-group-ingress \
+    --group-id $RDS_SECURITY_GROUP_ID \
+    --protocol -1 \
+    --port -1 \
+    --cidr $CIDR \
+    --region $REGION
+
 
 #aws ec2 authorize-security-group-ingress \
 #    --group-id $EC2_SECURITY_GROUP_ID \
@@ -58,31 +90,65 @@ echo "All the ports are open now for sg: $EC2_SECURITY_GROUP_ID "
 #    --port -1 \
 #    --cidr ::/0 \
 #    --region $REGION
-
+#
+#aws ec2 authorize-security-group-egress \
+#    --group-id $RDS_SECURITY_GROUP_ID \
+#    --protocol -1 \
+#    --port -1 \
+#    --cidr 0.0.0.0/0 \
+#    --region $REGION
 
 
 ###--------EC2 CONFIG--------------------
 
-AMI_ID="ami-08982f1c5bf93d976"
-INSTANCE_TYPE="t3.micro"
-KEY_PAIR="newkey"
+
 EC2_SECURITY_GROUP_ID="$EC2_SECURITY_GROUP_ID"
 SUBNET_ID="$APP_TIER_A"
-EC2_NAME="neweraInstance"
-SSMROLE=ssmagentRole
+
+read -rp "Enter the Instance_Name(default: neweraInstance): " EC2_NAME
+EC2_NAME=${EC2_NAME:-neweraInstance}
+
 
 
 ## RDS Config=====================
-RDS_NAME="rohurds"
+read -rp "Enter the RDS Name(default: rohurds): " RDS_NAME
+RDS_NAME=${RDS_NAME:-rohurds}
+
 DB_ENGINE=mysql
 DB_VERSION="8.0.42"
 DB_CLASS="db.t3.micro"
 DB_NAME="databse"
-DB_USERNAME="rohini"
-DB_PASSWORD="redhatrohini"
+
+read -rp "Enter the DB Username(default: rohini): " DB_USERNAME
+DB_USERNAME=${DB_USERNAME:-rohurds}
+
+
+
+while true; do
+read -rsp "Enter the DB Password(default: redhatrohini): " DB_PASSWORD
+echo
+
+DB_PASSWORD=${DB_PASSWORD:-redhatrohini}
+
+if [[ ${#DB_PASSWORD} -lt 8 ]]; then
+    echo "Password must be at least 8 characters long. Please try again."
+    continue
+fi
+read -rsp "Confirm Password: " DB_PASSWORD_CONFIRM
+echo
+if [[ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]]; then
+    echo "Passwords do not match. Please try again."
+   continue
+fi
+echo "Password accepted"
+break
+done
+
 DB_SECURITY_GROUP_NAME="default"
 DB_SUBNET_GROUP_NAME="rohurdssubs"
 SUBNET_IDS=( $DATA_TIER_A $DATA_TIER_B)
+
+echo "$SUBNET_ID"
 
 # Enable DNS support
 aws ec2 modify-vpc-attribute \
@@ -124,6 +190,7 @@ aws rds create-db-instance \
   --master-user-password "$DB_PASSWORD" \
   --db-name "$DB_NAME" \
   --db-subnet-group-name "$DB_SUBNET_GROUP_NAME" \
+  --vpc-security-group-ids "$RDS_SECURITY_GROUP_ID" \
   --backup-retention-period 1 \
   --publicly-accessible \
   --region "$REGION" \
@@ -283,4 +350,5 @@ echo " EC2 Instance ID : $EC2_ID"
 echo " EC2 Public IP   : $EC2_PUBLIC_IP"
 echo " RDS Endpoint    : $DB_ENDPOINT"
 echo " Visit Website   : http://$EC2_PUBLIC_IP/"
+echo " Congratulations! Your infrastructure is ready, Please run loadb.sh script next"
 echo "----------------------------------------"
