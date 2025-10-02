@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail  ## If the script fails, it will exit immediately
 
+source /mnt/c/shellpractice/variable.sh
+
 export AWS_PAGER=""   ## disable CLI pager so script runs non-interactively
 ##==============Variable for Launch Template==================
 
@@ -10,33 +12,26 @@ LAUNCH_TEMPLATE=${LAUNCH_TEMPLATE:-ASGLaunchTemplate}
 read -rp "Enter AWS region (default: us-east-1): " REGION
 REGION=${REGION:-us-east-1}
 
-KEY_PAIR=$( aws ec2 describe-instances --instance-ids <instance-id> --region $REGION --query 'Reservations[*].Instances[*].KeyName' --output text)
+KEY_PAIR=$( aws ec2 describe-instances --instance-ids $InstanceId --region $REGION --query 'Reservations[*].Instances[*].KeyName' --output text)
 EC2_NAME="neweraInstance"
-ASG_NAME=$LAUNCH_TEMPLATE
-EC2_SECURITY_GROUP_ID=$1 
 
 #================== Update with your VPC subnet IDs ================
-SUBNET_IDS="subnet-080f0c73cf1d3656d,subnet-0662782d4c057c8f3"
+
 
 ensure_sg_id() {
-  local sg_name=$1
   local sg_id=$(aws ec2 describe-security-groups --filters Name=group-name,Values="$EC2_SECURITY_GROUP_ID" --query 'SecurityGroups[0].GroupId' --output text --region "$REGION")
-  if [ -z "$sg_id" ]; then;
+  if [ -z "$sg_id" ]; then
     echo "Security group $sg_name not found. Please create it first."
     exit 1
   else
     echo The security group existing id is: $sg_id
   fi
 }
-
-# Scaling configuration
-MIN_SIZE=1
-MAX_SIZE=3
-DESIRED_CAPACITY=2
+ensure_sg_id "$EC2_SECURITY_GROUP_ID"
 
 
 # Encode user data file
-USERDATA=$(base64 -w0 user_data.sh)
+USERDATA=$(base64 -w0 user_data.sh) ## -w0 to avoid line breaks in the output
 
 #============Creating Launch Template==============
 
@@ -49,7 +44,7 @@ aws ec2 create-launch-template \
   --region "$REGION" \
   --version-description "Initial-version" \
   --launch-template-data "{
-    \"ImageId\": \"ami-08982f1c5bf93d976\",
+    \"ImageId\": \"$AMI\",
     \"InstanceType\": \"t3.micro\",
     \"KeyName\": \"$KEY_PAIR\",
     \"SecurityGroupIds\": [\"$EC2_SECURITY_GROUP_ID\"],

@@ -1,0 +1,11 @@
+# variable.sh
+InstanceId="i-02869250b96a9576e"
+EC2_SECURITY_GROUP_ID="sg-0b88ee672bdba3cf8"
+REGION=us-east-1
+ASG_NAME=MaASG
+SUBNET_IDS="subnet-080f0c73cf1d3656d,subnet-0662782d4c057c8f3"
+AMI=ami-08982f1c5bf93d976
+# Scaling configuration
+MIN_SIZE=1
+MAX_SIZE=3
+DESIRED_CAPACITY=2
