@@ -28,23 +28,23 @@ fi
 #================== Update with your VPC subnet IDs ================
 
 
-ensure_sg_id() {
-  local sg_id
-
-  sg_id=$(aws ec2 describe-security-groups --group-ids "$sg_id" --query 'SecurityGroups[0].GroupId' --output text --region "$REGION" 2>/dev/null || true)
-
-  if [ -z "$sg_id" ] || [ "$sg_id" = "None" ]; then
-    echo "Security group $lookup_value not found. Please create it first."
-    exit 1
-  fi
-
-  echo "The security group existing id is: $sg_id"
-  SECURITY_GROUP_ID="$sg_id"
-}
-ensure_sg_id "$EC2_SECURITY_GROUP_ID"
-
-
-### Encode user data file
+#ensure_sg_id() {
+#  local sg_id
+#
+#  sg_id=$(aws ec2 describe-security-groups --group-ids "$sg_id" --query 'SecurityGroups[0].GroupId' --output text --region "$REGION" 2>/dev/null || true)
+#
+#  if [ -z "$sg_id" ] || [ "$sg_id" = "None" ]; then
+#    echo "Security group $lookup_value not found. Please create it first."
+#    exit 1
+#  fi
+#
+#  echo "The security group existing id is: $sg_id"
+#  SECURITY_GROUP_ID="$sg_id"
+#}
+#ensure_sg_id "$EC2_SECURITY_GROUP_ID"
+#
+#
+#### Encode user data file
 ##USERDATA=$(base64 -w0 user_data.sh) ## -w0 to avoid line breaks in the output
 
 #============Creating Launch Template==============
@@ -52,6 +52,10 @@ ensure_sg_id "$EC2_SECURITY_GROUP_ID"
 
 echo "Creating Launch Template: $LAUNCH_TEMPLATE"
 
+
+##Tags for future refrence
+
+TAGS=$(aws ec2 describe-tags --filters "Name=resource-id, Values=$InstanceId"  --query 'Tags[].{Key:Key,Value:Value}' --output json )
 
 aws ec2 create-launch-template \
   --launch-template-name "$LAUNCH_TEMPLATE" \
@@ -61,6 +65,8 @@ aws ec2 create-launch-template \
 
 
 echo " Launch Template $LAUNCH_TEMPLATE created."
+
+jq 'del(.Placement.AvailabilityZoneId)'
 
 
 ##==============Create Auto Scaling Group==================

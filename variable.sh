@@ -1,5 +1,5 @@
 # variable.sh
-EC2_NAME="neweraInstance"
+EC2_NAME="fighing4it"
 InstanceId="i-02869250b96a9576e"
 EC2_SECURITY_GROUP_ID="sg-0b88ee672bdba3cf8"
 REGION=us-east-1
