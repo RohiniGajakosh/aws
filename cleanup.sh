@@ -64,12 +64,21 @@ else
   echo "DB subnet group $DB_SUBNET_GROUP_NAME does not exist, skipping deletion."
 fi
 
+#delete target groups
+echo "Deleting target groups in VPC $VPC_ID..."
+TG_ARNs=$(aws elbv2 describe-target-groups --region "$REGION" --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" --output text)
+for TG_ARN in $TG_ARNs; do
+  aws elbv2 delete-target-group --target-group-arn "$TG_ARN" --region "$REGION"
+done    
+
 # Delete load balancers
 echo "Deleting load balancers in VPC $VPC_ID..."
 LB_ARNs=$(aws elbv2 describe-load-balancers --region "$REGION" --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text)
 for LB_ARN in $LB_ARNs; do
   aws elbv2 delete-load-balancer --load-balancer-arn "$LB_ARN" --region "$REGION"
 done
+
+
 
 # Delete subnets
 echo "Deleting all subnets in VPC $VPC_ID..."
