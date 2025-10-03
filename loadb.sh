@@ -1,7 +1,6 @@
 #!/bin/bash
 
-
-source= /mnt/c/shellpractice/variable.sh
+source /mnt/d/AWS/project/awscli/variable.sh  
 set -euo pipefail
 
 ##=== Configuration  =======
@@ -38,9 +37,9 @@ echo "Creating =======LoadBalancer=============="
 echo
 
 Load_BALANCER=$(aws elbv2 create-load-balancer \
- --name $LB_NAME --subnets $SUBNET_IDS \
+ --name $LB_NAME --subnets ${SUBNET_IDS//,/ } \
  --security-groups $EC2_SECURITY_GROUP_ID  \
- --seheme internet-facing \
+ --scheme internet-facing \
  --region $REGION \
  --type application \
  --ip-address-type ipv4 \

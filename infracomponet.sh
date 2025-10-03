@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source /mnt/c/shellpractice/variable.sh
+source /mnt/d/AWS/project/awscli/variable.sh  
 
 set -euo pipefail  ##If the script fails , stopt the exectution
 

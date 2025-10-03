@@ -1,10 +1,10 @@
 #!/bin/bash
 
-source= /mnt/c/shellpractice/loadb.sh
+source /mnt/d/AWS/project/awscli/variable.sh 
 
 set -euo pipefail  ## If the script fails, it will exit immediately
 
-source /mnt/c/shellpractice/variable.sh
+# source /mnt/d/AWS/project/awscli/loadb.sh 
 
 export AWS_PAGER=""   ## disable CLI pager so script runs non-interactively
 ##==============Variable for Launch Template==================
@@ -60,21 +60,33 @@ echo "Creating Launch Template: $LAUNCH_TEMPLATE"
 
 TAGS=$(aws ec2 describe-tags --filters "Name=resource-id, Values=$InstanceId"  --query 'Tags[].{Key:Key,Value:Value}' --output json )
 
-aws ec2 create-launch-template \
+# aws ec2 create-launch-template \
+#   --launch-template-name "$LAUNCH_TEMPLATE" \
+#   --version-description "Initial_Version" \
+#   --launch-template-data "$(aws ec2 describe-instances --instance-ids $InstanceId --query 'Reservations[0].Instances[0]' --output json)" \
+#   --region "$REGION"
+
+  aws ec2 create-launch-template \
   --launch-template-name "$LAUNCH_TEMPLATE" \
   --version-description "Initial_Version" \
-  --launch-template-data "$(aws ec2 describe-instances --instance-ids $InstanceId --query 'Reservations[0].Instances[0]' --output json)" \
+  --launch-template-data "{
+    \"ImageId\": \"$AMI_ID\",
+    \"InstanceType\": \"$INSTANCE_TYPE\",
+    \"KeyName\": \"$KEY_PAIR\",
+    \"SecurityGroupIds\": [\"$EC2_SECURITY_GROUP_ID\"]
+  }" \
   --region "$REGION"
 
 
 echo " Launch Template $LAUNCH_TEMPLATE created."
 
-jq 'del(.Placement.AvailabilityZoneId)'
+# jq 'del(.Placement.AvailabilityZoneId)'
 
 
 ##==============Create Auto Scaling Group==================
 
 echo "Creating Auto Scaling Group: $ASG_NAME"
+TARGET_GROUP_ARN=$(aws elbv2 describe-target-groups --names "$TARGET_GROUP_NAME" --region "$REGION" --query 'TargetGroups[0].TargetGroupArn' --output text)
 
 aws autoscaling create-auto-scaling-group \
   --auto-scaling-group-name "$ASG_NAME" \
@@ -83,7 +95,7 @@ aws autoscaling create-auto-scaling-group \
   --max-size $MAX_SIZE \
   --desired-capacity $DESIRED_CAPACITY \
   --vpc-zone-identifier "$SUBNET_IDS" \
-  --target-group-arns "$TARGET_GROUP" \
+  --target-group-arns "$TARGET_GROUP_ARN" \
   --region "$REGION"
 
 
